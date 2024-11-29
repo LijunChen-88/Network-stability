@@ -1,0 +1,188 @@
+#Network
+llibrary(tidyverse)
+library(networkD3)
+
+MisLinks = read.delim("Network link.txt",sep = "/t")
+MisNodes = read.delim("Network node.txt",sep = "/t")
+
+
+Node2index = list()
+Node2index[MisNodes$name] = 0:length(MisNodes$name)
+
+MisLinks = MisLinks %>%
+  mutate(source2 = unlist(Node2index[source])) %>%
+  mutate(target2 = unlist(Node2index[target]))
+
+group2project = paste(unique(MisNodes$group),collapse = '","')
+color2project = paste(unique(MisNodes$group_color),collapse = '","')
+my_color <- paste0('d3.scaleOrdinal().domain(["',group2project,'"]).range(["',color2project,'"])')
+
+
+forceNetwork(Links = MisLinks, 
+             Nodes = MisNodes,
+             Source = "source2", 
+             Target = "target2",
+             Value ="value",
+             NodeID = "name",
+             Group = "group", 
+             opacity= 1,        # 透明度
+             Nodesize="size",
+             zoom = TRUE,       # 是否可以缩放
+             opacityNoHover=1,  # 鼠标没有悬浮在节点上时，文字的透明度(0-1)
+             colourScale = JS(my_color),   # 节点颜色
+             legend=T, 
+             fontSize = 10,
+             linkColour= MisLinks$colour
+             )
+
+#Robustness
+library(igraph)
+a <- read.table("D:/Statistics Softwares/Rstudio/Pathway/robustness/edge.csv")
+b=a[,c(1:2)]
+b=t(b)
+b=t(b)
+ig=graph_from_edgelist(b,directed=FALSE)
+natcon <- function(ig) {
+        N   <- vcount(ig)
+        adj <- get.adjacency(ig)
+        evals <- eigen(adj)$value
+        nc  <- log(mean(exp(evals)))
+        nc / (N - log(N))
+}
+nc.attack <- function(ig) {
+        hubord <- order(rank(betweenness(ig)), rank(degree(ig)), decreasing=TRUE)
+        sapply(1:round(vcount(ig)*.8), function(i) {
+                ind <- hubord[1:i]
+                tmp <- delete_vertices(ig, V(ig)$name[ind])
+                natcon(tmp)
+        }) }
+nc<- nc.attack(ig)
+write.csv(nc,"results_robustness.csv")
+
+
+
+#Cohesion
+pers.cutoff <- 0.10
+iter <- 200
+tax.shuffle <- T
+use.custom.cors <- F
+
+b <- read.table("otu.txt", header = T, row.names = 1,sep='\t')
+
+
+zero <- function(vec){
+  num.zero <- length(which(vec == 0))
+  return(num.zero)
+}
+
+neg.mean <- function(vector){
+  neg.vals <- vector[which(vector < 0)]
+  n.mean <- mean(neg.vals)
+  if(length(neg.vals) == 0) n.mean <- 0
+  return(n.mean)
+}
+
+pos.mean <- function(vector){
+  pos.vals <- vector[which(vector > 0)]
+  p.mean <- mean(pos.vals)
+  if(length(pos.vals) == 0) p.mean <- 0
+  return(p.mean)
+}
+
+if(use.custom.cors == T) {
+  custom.cor.mat <- read.csv("your_path_here.csv", header = T, row.names = 1)
+  custom.cor.mat <- as.matrix(custom.cor.mat)
+  #Check that correlation matrix and abundance matrix have the same dimension
+  print(dim(b)[2] == dim(custom.cor.mat)[2])
+}
+
+c <- as.matrix(b)
+c <- c[rowSums(c) > 0, colSums(c) > 0]
+
+rowsums.orig <- rowSums(c)
+
+zero.cutoff <- ceiling(pers.cutoff * dim(c)[1])
+
+d <- c[ , apply(c, 2, zero) < (dim(c)[1]-zero.cutoff) ]
+
+d <- d[rowSums(d) > 0, ]
+
+if(use.custom.cors == T){
+  custom.cor.mat.sub <- custom.cor.mat[apply(c, 2, zero) < (dim(c)[1]-zero.cutoff), apply(c, 2, zero) < (dim(c)[1]-zero.cutoff)]
+}
+
+rel.d <- d / rowsums.orig
+
+cor.mat.true <- cor(rel.d)
+
+med.tax.cors <- vector()
+if(use.custom.cors == F) {
+  if(tax.shuffle) { 
+    for(which.taxon in 1:dim(rel.d)[2]){
+      perm.cor.vec.mat <- vector()
+      
+      for(i in 1:iter){ 
+        perm.rel.d <- matrix(numeric(0), dim(rel.d)[1], dim(rel.d)[2])
+        rownames(perm.rel.d) <- rownames(rel.d)
+        colnames(perm.rel.d) <- colnames(rel.d)
+        
+                for(j in 1:dim(rel.d)[2]){  
+                    perm.rel.d[, j ] <- sample(rel.d[ ,j ]) 
+        }
+        
+                perm.rel.d[, which.taxon] <- rel.d[ , which.taxon]
+        
+                cor.mat.null <- cor(perm.rel.d)
+        
+                perm.cor.vec.mat <- cbind(perm.cor.vec.mat, cor.mat.null[, which.taxon])
+        
+      }
+      med.tax.cors <- cbind(med.tax.cors, apply(perm.cor.vec.mat, 1, median))
+          if(which.taxon %% 20 == 0){print(which.taxon)}
+    }
+  } else { 
+    for(which.taxon in 1:dim(rel.d)[2]){  
+      perm.cor.vec.mat <- vector()
+      
+      for(i in 1:iter){ 
+        perm.rel.d <- rel.d 
+              for(j in 1:dim(rel.d)[1]){ 
+                    which.replace <- which(rel.d[j, ] > 0 ) 
+                    which.replace.nonfocal <- which.replace[!(which.replace %in% which.taxon)]
+                    perm.rel.d[j, which.replace.nonfocal] <- sample(rel.d[ j, which.replace.nonfocal]) 
+        }
+        
+               cor.mat.null <- cor(perm.rel.d)
+        
+        perm.cor.vec.mat <- cbind(perm.cor.vec.mat, cor.mat.null[, which.taxon])
+        
+      }
+      med.tax.cors <- cbind(med.tax.cors, apply(perm.cor.vec.mat, 1, median))
+          if(which.taxon %% 20 == 0){print(which.taxon)}
+    }
+  }
+}
+
+
+ifelse(use.custom.cors == T, {
+  obs.exp.cors.mat <- custom.cor.mat.sub}, {
+    obs.exp.cors.mat <- cor.mat.true - med.tax.cors
+  }
+)
+diag(obs.exp.cors.mat) <- 0
+
+
+connectedness.pos <- apply(obs.exp.cors.mat, 2, pos.mean)
+connectedness.neg <- apply(obs.exp.cors.mat, 2, neg.mean)
+
+
+cohesion.pos <- rel.d %*% connectedness.pos
+cohesion.neg <- rel.d %*% connectedness.neg
+
+
+output <- list(connectedness.neg, connectedness.pos, cohesion.neg, cohesion.pos)
+names(output) <- c("Negative Connectedness", "Positive Connectedness", "Negative Cohesion", "Positive Cohesion")
+
+print(output)
+
+write.csv(output,"Cohesion.csv",row.names = F)

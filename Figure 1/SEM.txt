@@ -1,0 +1,36 @@
+Standardized Regression Weights: (Group number 1 - Default model)				
+				
+			Estimate	P
+AN	<---	soil	-0.628	0.007
+pH	<---	soil	-0.568	0.015
+AK	<---	soil	0.887	***
+Zdiversity	<---	pH	-0.175	0.107
+Zdiversity	<---	AN	0.317	0.003
+Zdiversity	<---	AK	0.586	0.007
+Znetworkstability	<---	Zdiversity	0.759	0.003
+Znetworkstability	<---	AN	0.57	0.002
+Znetworkstability	<---	pH	0.231	0.036
+Znetworkstability	<---	soil	0.333	0.032
+ALP	<---	Znetworkstability	0.493	0.007
+ALP	<---	Zdiversity	0.292	0.039
+SOC	<---	soil	0.705	
+ALP	<---	pH	-0.15	0.454
+PAC	<---	ALP	0.309	0.074
+Zproductivity	<---	PAC	0.408	0.056
+				
+				
+Minimum was achieved				
+Chi-square = 28.445				
+Degrees of freedom = 18				
+Probability level = .507				
+				
+				
+Model	RMSEA	LO 90	HI 90	PCLOSE
+Default model	0.012	0	0.284	0.077
+Independence model	0.418	0.36	0.477	0
+				
+				
+Model	RMR	GFI	AGFI	PGFI
+Default model	1.882	0.725	0.45	0.268
+Saturated model	0	1		
+Independence model	44.499	0.294	0.137	0.24
